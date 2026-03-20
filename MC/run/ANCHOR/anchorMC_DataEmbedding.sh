@@ -324,10 +324,10 @@ python3 ${O2DPG_ROOT}/MC/utils/o2dpg_data_embedding_utils.py --aod-file ${AOD_DA
 
 parallel_job_count=0
 failed_count=0
-for external_context in collission_context_*.root; do
+for external_context in collision_context_*.root; do
   echo "Embedding into ${external_context}"
   # extract timeframe from name
-  anchoring_tf="${external_context#collission_context_}" # remove prefix 'collision_context_'
+  anchoring_tf="${external_context#collision_context_}" # remove prefix 'collision_context_'
   anchoring_tf="${anchoring_tf%.root}" # remove suffix '.root'
   echo "Treating timeframe ${anchoring_tf}"
 

@@ -15,16 +15,19 @@ export ALIEN_JDL_LPMANCHORPRODUCTION=LHC23f
 export ALIEN_JDL_LPMANCHORYEAR=2023
 
 # need to give a data AOD
-export ALIEN_JDL_MC_DATA_EMBEDDING_AO2D="alien:///alice/data/2023/LHC23zzm/544742/apass5/0000/o2_ctf_run00544742_orbit0137377824_tf0002239365_epn262/002/AO2D.root"
+#export ALIEN_JDL_MC_DATA_EMBEDDING_AO2D="alien:///alice/data/2023/LHC23zzm/544742/apass5/0000/o2_ctf_run00544742_orbit0137377824_tf0002239365_epn262/002/AO2D.root"
+export ALIEN_JDL_MC_DATA_EMBEDDING_AO2D="local:///home/nzardosh/alice/Embedding/AO2D_Derived_PbPb.root"
 
 export NTIMEFRAMES=1
 export NWORKERS=1
 export SPLITID=1
 export PRODSPLIT=1
 export ALIEN_JDL_O2DPGWORKFLOWTARGET=aod
+export DATA_EMBEDDING_LIMIT=50
 
 # setup of the signal generator
-export ALIEN_JDL_ANCHOR_SIM_OPTIONS="-gen pythia8pp"
+#export ALIEN_JDL_ANCHOR_SIM_OPTIONS="-gen pythia8pp"
+export ALIEN_JDL_ANCHOR_SIM_OPTIONS="-gen external -ini $O2DPG_ROOT/MC/config/PWGGAJE/ini/GeneratorJE_gapgen2_hook_pp5360GeV.ini"
 
 export DISABLE_QC=1
 ${O2DPG_ROOT}/MC/run/ANCHOR/anchorMC_DataEmbedding.sh

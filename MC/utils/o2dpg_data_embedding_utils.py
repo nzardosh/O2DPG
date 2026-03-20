@@ -184,6 +184,72 @@ def get_timeframe_structure(filepath, run_info, max_folders=1, include_dataframe
     return merged
 
 
+def get_je_timeframe_structure(filepath, run_info, max_folders=1, include_dataframe = False, folder_filter=None):
+    """
+    run_info: The aggregated run_info object for this run
+    """
+    def find_tree_key(keys, pattern):
+        for key in keys:
+            key_clean = key
+            if re.search(pattern, key_clean, re.IGNORECASE):
+                return key_clean
+        return None
+
+    file = uproot.open(filepath)
+    raw_keys = file.keys()
+        
+    folders = { k.split("/")[0] : 1 for k in raw_keys if "O2jbc" in k }
+    folders = [ k for k in folders.keys() ] 
+    folders = folders[:max_folders]  
+
+    print ("have ", len(raw_keys), f" in file {filepath}")
+
+    merged = {} # data containers per file
+    print(folders)
+    for folder in folders:
+        print(folder)
+        if folder_filter != None and folder != folder_filter:
+            continue
+        #print (f"Looking into {folder}")
+        
+        # Find correct table names using regex
+        bc_key = find_tree_key(raw_keys, f"^{folder}/O2jbc")
+        bc_data = file[bc_key].arrays(library="pd")
+
+        # collision data
+        coll_key = find_tree_key(raw_keys, f"^{folder}/O2jcollision")
+        coll_data = file[coll_key].arrays(library="pd")
+
+        if bc_data.empty or coll_data.empty:
+            print("skipping!!")
+            continue 
+        
+        # extend the data
+        bc_data = get_bc_with_timestamps(bc_data, run_info)
+
+        print(bc_data)
+        
+        # do the splice with collision data
+        bc_data_coll = bc_data.iloc[coll_data["fIndexJBCs"]].reset_index(drop=True)
+        # this is the combined table containing collision data associated to bc and time information
+        combined = pd.concat([bc_data_coll, coll_data], axis = 1)
+        
+        # do the actual timeframe structure calculation; we only take collisions with a trigger decision attached
+        triggered = combined[combined["fTriggerMask"] != 0]
+        if triggered.empty:
+            continue
+        timeframe_structure = triggered.groupby('timeframeID').apply(
+        lambda g: list(zip(g['fGlobalBC'], g['fPosX'], g['fPosY'], g['fPosZ'], g['orbit'], g['bc_within_orbit'], g['fCollisionTime']))
+        ).reset_index(name='position_vectors')
+        
+        folderkey = folder + '@' + filepath
+        merged[folderkey] = timeframe_structure # data per folder
+        if include_dataframe:
+            merged["data"] = combined
+    
+    # annotate which timeframes are available here and from which file
+    return merged
+
 def fetch_bccoll_to_localFile(alien_file, local_filename):
   """
   A function to remotely talk to a ROOT file ... and fetching only
@@ -192,7 +258,7 @@ def fetch_bccoll_to_localFile(alien_file, local_filename):
 
   Returns True if success, otherwise False
   """
-
+  is_je_derived = True
   # make sure we have a TGrid connection
   # Connect to AliEn grid
   if not ROOT.gGrid:
@@ -228,16 +294,26 @@ def fetch_bccoll_to_localFile(alien_file, local_filename):
         # Copy only specified trees if they exist
         for tree_name in trees_to_copy:
             if df_dir.GetListOfKeys().FindObject(tree_name):
+                print("Copying tree:", tree_name)
+                is_je_derived = False
                 tree = df_dir.Get(tree_name)
                 cloned_tree = tree.CloneTree(-1)  # copy all entries
                 cloned_tree.Write(tree_name)
+
+        if is_je_derived:
+            trees_to_copy_je = ["O2jbc", "O2jcollision"]
+            for tree_name in trees_to_copy_je:
+                if df_dir.GetListOfKeys().FindObject(tree_name):
+                    tree = df_dir.Get(tree_name)
+                    cloned_tree = tree.CloneTree(-1)  # copy all entries
+                    cloned_tree.Write(tree_name)
 
         outfile.cd()  # go back to top-level for next DF_
 
   # Close files
   outfile.Close()
   infile.Close()
-  return True
+  return True, is_je_derived
 
 
 def convert_to_digicontext(aod_timeframe=None, timeframeID=-1):
@@ -288,7 +364,7 @@ def convert_to_digicontext(aod_timeframe=None, timeframeID=-1):
     
     digicontext.setSimPrefixes(prefixes);
     digicontext.printCollisionSummary();
-    digicontext.saveToFile(f"collission_context_{timeframeID}.root")
+    digicontext.saveToFile(f"collision_context_{timeframeID}.root")
 
 
 def process_data_AO2D(file_name, run_number, upper_limit = -1):
@@ -298,11 +374,17 @@ def process_data_AO2D(file_name, run_number, upper_limit = -1):
     timeframe_data = []
 
     local_filename = "local.root"
-    fetch_bccoll_to_localFile(file_name, local_filename)
+    ok, is_je_derived = fetch_bccoll_to_localFile(file_name, local_filename)
+    print (is_je_derived)
 
     # fetch run_info object
     run_info = retrieve_Aggregated_RunInfos(run_number)
-    merged = get_timeframe_structure(local_filename, run_info, max_folders=1000)
+    merged = {}
+    if is_je_derived :
+        print("am here!")
+        merged = get_je_timeframe_structure(local_filename, run_info, max_folders=1000)
+    else:
+        merged = get_timeframe_structure(local_filename, run_info, max_folders=1000)
     print ("Got " + str(len(merged)) + " datasets")
     timeframe_data.append(merged)
 
